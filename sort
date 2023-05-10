@@ -1,0 +1,134 @@
+import re
+import sys 
+import os
+import shutil
+from pathlib import Path
+import zipfile
+import tarfile
+import gzip
+
+p = Path(sys.argv[1]) # Шлях до папки 
+
+def normalize(filename):
+    """
+    Нормалізує назву файлу/папки
+    """
+    translit = {
+        ord('а'): 'a', ord('б'): 'b', ord('в'): 'v', ord('г'): 'h', ord('ґ'): 'g',
+        ord('д'): 'd', ord('е'): 'e', ord('є'): 'ie', ord('ж'): 'zh', ord('з'): 'z',
+        ord('и'): 'y', ord('і'): 'i', ord('ї'): 'i', ord('й'): 'i', ord('к'): 'k',
+        ord('л'): 'l', ord('м'): 'm', ord('н'): 'n', ord('о'): 'o', ord('п'): 'p',
+        ord('р'): 'r', ord('с'): 's', ord('т'): 't', ord('у'): 'u', ord('ф'): 'f',
+        ord('х'): 'kh', ord('ц'): 'ts', ord('ч'): 'ch', ord('ш'): 'sh', ord('щ'): 'shch',
+        ord('ю'): 'iu', ord('я'): 'ia', ord('ь'): '', ord('\''): '', ord('`'): '',
+    }
+    filename = filename.lower().translate(translit)
+    filename = re.sub(r'[^\w.]+', '_', filename) 
+    return filename
+
+def extract_archive(archive_path, destination):
+    """
+    Розпаковує архіви в папку призначення
+    """
+    if zipfile.is_zipfile(archive_path):
+        with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+            zip_ref.extractall(destination)
+    
+    elif tarfile.is_tarfile(archive_path):
+        with tarfile.open(archive_path, 'r') as tar_ref:
+            tar_ref.extractall(destination)
+    
+    elif archive_path.endswith('.gz'):
+        with gzip.open(archive_path, 'rb') as gz_ref:
+            with open(destination, 'wb') as dest_file:
+                dest_file.write(gz_ref.read())
+    
+def sort_files(path):
+    image_extensions = ('JPEG', 'PNG', 'JPG', 'SVG')
+    video_extensions = ('AVI', 'MP4', 'MOV', 'MKV')
+    document_extensions = ('DOC', 'DOCX', 'TXT', 'PDF', 'XLSX', 'XLS', 'PPTX')
+    music_extensions = ('MP3', 'OGG', 'WAV', 'AMR')
+    archive_extensions = ('ZIP', 'GZ', 'TAR')
+    image_files = []
+    video_files = []
+    document_files = []
+    music_files = []
+    archive_files = []
+    unknown_files = []
+    all_extensions = set()
+    subdirectories = []
+    for filename in os.listdir(path):
+        file_path = os.path.join(path, filename)
+        if os.path.isdir(file_path):
+            subdirectories.append(file_path)
+        elif os.path.isfile(file_path):
+            extension = filename.split('.')[-1].upper()
+            all_extensions.add(extension)
+
+            if extension in image_extensions:
+                image_files.append(filename)
+                try: 
+                    os.makedirs(f'{p}\Images') 
+                except FileExistsError:
+                    pass 
+                shutil.move(file_path, os.path.join(p, "Images", normalize(filename)))
+                
+            elif extension in video_extensions:
+                video_files.append(filename)
+                try:
+                    os.makedirs(f'{p}\Videos')
+                except FileExistsError:
+                    pass
+                shutil.move(file_path, os.path.join(p, "Videos", normalize(filename)))
+                
+            elif extension in document_extensions:
+                document_files.append(filename)
+                try:
+                    os.makedirs(f'{p}\Documents')
+                except FileExistsError:
+                    pass
+                shutil.move(file_path, os.path.join(p, "Documents", normalize(filename)))
+                           
+            elif extension in music_extensions:
+                music_files.append(filename)
+                try:
+                    os.makedirs(f'{p}\Music')
+                except FileExistsError:
+                    pass
+                shutil.move(file_path, os.path.join(p, "Music", normalize(filename)))
+            
+            elif extension in archive_extensions:
+                archive_files.append(filename)
+                try:
+                    os.makedirs(f'{p}\Archives')
+                except FileExistsError:
+                    pass
+                archive_folder = p / "Archives" / normalize(filename)
+                os.makedirs(archive_folder, exist_ok=True)
+                extract_archive(file_path, archive_folder)
+                os.remove(file_path)
+            else:
+                unknown_files.append(filename)
+    
+    # Обробка підпапок
+    for subdir in subdirectories:
+        sort_files(subdir)
+    # Видалення порожніх папок
+    for subdir in os.listdir(path):
+        subdir_path = os.path.join(path, subdir)
+        if os.path.isdir(subdir_path) and not os.listdir(subdir_path):
+            os.rmdir(subdir_path)
+
+    print(f"Images: {image_files}")
+    print(f"Videos: {video_files}")
+    print(f"Documents: {document_files}")
+    print(f"Music: {music_files}")
+    print(f"Archives: {archive_files}")
+    print(f"Unknown files: {unknown_files}")
+    print(f"All extensions: {all_extensions}")
+    print(f"Unknown extensions: {all_extensions - set(image_extensions + video_extensions + document_extensions + music_extensions + archive_extensions)}")
+
+if __name__ == '__main__':
+    sort_files(p)
+
+
